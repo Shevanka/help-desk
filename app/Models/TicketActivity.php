@@ -15,6 +15,7 @@ class TicketActivity extends Model
     public const STATUS_CHANGED = 'status_changed';
     public const PRIORITY_CHANGED = 'priority_changed';
     public const COMMENTED = 'commented';
+    public const ATTACHMENT = 'attachment';
 
     protected $fillable = ['ticket_id', 'user_id', 'action', 'old_value', 'new_value', 'description'];
 

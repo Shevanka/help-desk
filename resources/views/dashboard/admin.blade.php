@@ -20,29 +20,39 @@
         </a>
     @endif
 
-    <div class="mt-6 grid gap-6 xl:grid-cols-3">
-        <x-card title="Tiket Terbaru" :padding="false" class="xl:col-span-2">
-            <x-slot name="headerActions">
-                <a href="{{ route('tickets.index') }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Lihat semua</a>
-            </x-slot>
-            <x-ticket-table :tickets="$recent" />
+    @php $statusCases = App\Enums\TicketStatus::cases(); @endphp
+    <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <x-card title="Tiket berdasarkan Status">
+            <x-chart type="doughnut" label="Tiket berdasarkan status"
+                :labels="array_map(fn ($s) => $s->label(), $statusCases)"
+                :datasets="[[
+                    'label' => 'Tiket',
+                    'data' => array_map(fn ($s) => $stats[$s->value], $statusCases),
+                    'backgroundColor' => array_map(fn ($s) => $s->chartColor(), $statusCases),
+                    'borderWidth' => 0,
+                ]]" />
         </x-card>
 
-        <x-card title="Tiket per Kategori">
-            @php $max = max(1, $categories->max('tickets_count')); @endphp
-            <ul class="space-y-3">
-                @foreach ($categories as $category)
-                    <li>
-                        <div class="flex items-center justify-between text-sm">
-                            <span @class(['text-slate-700', 'line-through text-slate-400' => ! $category->is_active])>{{ $category->name }}</span>
-                            <span class="font-medium tabular-nums text-slate-900">{{ $category->tickets_count }}</span>
-                        </div>
-                        <div class="mt-1 h-2 rounded-full bg-slate-100">
-                            <div class="h-2 rounded-full bg-indigo-500" style="width: {{ round($category->tickets_count / $max * 100) }}%"></div>
-                        </div>
-                    </li>
-                @endforeach
-            </ul>
+        <x-card title="Tiket berdasarkan Kategori">
+            <x-slot name="headerActions">
+                <a href="{{ route('admin.reports.index') }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Laporan lengkap</a>
+            </x-slot>
+            <x-chart type="bar" index-axis="y" label="Tiket berdasarkan kategori"
+                :labels="$categories->map(fn ($c) => $c->name.($c->is_active ? '' : ' (nonaktif)'))->all()"
+                :datasets="[[
+                    'label' => 'Tiket',
+                    'data' => $categories->pluck('tickets_count')->map(fn ($n) => (int) $n)->all(),
+                    'backgroundColor' => '#6366f1',
+                    'borderRadius' => 6,
+                    'maxBarThickness' => 22,
+                ]]" />
         </x-card>
     </div>
+
+    <x-card title="Tiket Terbaru" :padding="false" class="mt-6">
+        <x-slot name="headerActions">
+            <a href="{{ route('tickets.index') }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Lihat semua</a>
+        </x-slot>
+        <x-ticket-table :tickets="$recent" />
+    </x-card>
 </x-app-layout>

@@ -5,9 +5,10 @@
 
     <div class="mx-auto max-w-3xl">
         <x-card>
-            <form method="POST" action="{{ route('tickets.store') }}" class="space-y-6">
+            <form method="POST" action="{{ route('tickets.store') }}" enctype="multipart/form-data" class="space-y-6">
                 @csrf
                 @include('tickets.partials.fields', ['ticket' => null])
+                @include('tickets.partials.attachment-input', ['ticket' => null])
 
                 <div>
                     <x-input-label value="Prioritas" />

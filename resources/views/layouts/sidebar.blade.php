@@ -30,10 +30,16 @@
             <x-sidebar-link :href="route('tickets.create')" :active="request()->routeIs('tickets.create')" icon="plus">Create Ticket</x-sidebar-link>
         @endcan
 
+        @if ($user->isTechnician())
+            <x-sidebar-link :href="route('tickets.history')" :active="request()->routeIs('tickets.history')" icon="history">Ticket History</x-sidebar-link>
+        @endif
+
         @if ($user->isAdmin())
             <p class="px-3 pb-1 pt-5 text-xs font-semibold uppercase tracking-wider text-slate-500">Administrasi</p>
             <x-sidebar-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')" icon="users">User Management</x-sidebar-link>
-            <x-sidebar-link :href="route('admin.categories.index')" :active="request()->routeIs('admin.categories.*')" icon="tag">Categories</x-sidebar-link>        @endif
+            <x-sidebar-link :href="route('admin.categories.index')" :active="request()->routeIs('admin.categories.*')" icon="tag">Categories</x-sidebar-link>
+            <x-sidebar-link :href="route('admin.reports.index')" :active="request()->routeIs('admin.reports.*')" icon="chart">Reports</x-sidebar-link>
+        @endif
 
         <p class="px-3 pb-1 pt-5 text-xs font-semibold uppercase tracking-wider text-slate-500">Akun</p>
         <x-sidebar-link :href="route('profile.edit')" :active="request()->routeIs('profile.*')" icon="user">Profile</x-sidebar-link>

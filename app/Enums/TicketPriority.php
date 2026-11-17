@@ -24,6 +24,16 @@ enum TicketPriority: string
         };
     }
 
+    public function chartColor(): string
+    {
+        return match ($this) {
+            self::Low => '#94a3b8',
+            self::Medium => '#3b82f6',
+            self::High => '#f97316',
+            self::Critical => '#ef4444',
+        };
+    }
+
     public function badgeClasses(): string
     {
         return match ($this) {

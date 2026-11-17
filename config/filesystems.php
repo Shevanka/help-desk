@@ -33,7 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Ticket attachments live here; they are only served through
+            // TicketController@attachment (policy-checked), never directly.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],
