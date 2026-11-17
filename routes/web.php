@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
@@ -13,8 +14,14 @@ Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'logi
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
+    // Must be registered before the resource so "history" isn't read as a ticket number.
+    Route::get('/tickets/history', [TicketController::class, 'history'])
+        ->middleware('role:technician')
+        ->name('tickets.history');
+
     // Tickets – access per ticket is enforced by TicketPolicy.
     Route::resource('tickets', TicketController::class);
+    Route::get('/tickets/{ticket}/attachment', [TicketController::class, 'attachment'])->name('tickets.attachment');
     Route::controller(TicketActionController::class)->prefix('tickets/{ticket}')->name('tickets.')->group(function () {
         Route::patch('/assign', 'assign')->name('assign');
         Route::patch('/status', 'status')->name('status');
@@ -26,6 +33,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::resource('categories', CategoryController::class)->except('show');
         Route::resource('users', UserController::class)->except(['show', 'destroy']);
+        Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('reports/export', [ReportController::class, 'export'])->name('reports.export');
     });
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

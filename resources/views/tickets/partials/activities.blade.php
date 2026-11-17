@@ -6,6 +6,7 @@
         'priority_changed' => 'bg-orange-500',
         'commented' => 'bg-slate-400',
         'updated' => 'bg-slate-400',
+        'attachment' => 'bg-teal-500',
     ];
 @endphp
 

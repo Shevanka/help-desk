@@ -8,8 +8,11 @@ use App\Models\Comment;
 use App\Models\Ticket;
 use App\Models\TicketActivity;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Business logic for tickets. Every mutation runs inside a DB transaction
@@ -17,8 +20,97 @@ use Illuminate\Support\Str;
  */
 class TicketService
 {
+    public const ATTACHMENT_DISK = 'local'; // storage/app/private – not web accessible
+
     /** @param array{subject:string, description:string, category_id:int, priority:string} $data */
-    public function create(User $reporter, array $data): Ticket
+    public function create(User $reporter, array $data, ?UploadedFile $attachment = null): Ticket
+    {
+        $stored = $attachment ? $this->storeFile($attachment) : null;
+
+        try {
+            return DB::transaction(function () use ($reporter, $data, $stored, $attachment) {
+                $ticket = $this->createRecord($reporter, $data);
+
+                if ($stored) {
+                    $ticket->forceFill(['attachment' => $stored, 'attachment_name' => $this->cleanName($attachment)])->save();
+                    $this->log($ticket, $reporter, TicketActivity::ATTACHMENT, null, $ticket->attachment_name, 'Attachment uploaded');
+                }
+
+                return $ticket;
+            });
+        } catch (Throwable $e) {
+            $this->deleteFile($stored);
+            throw $e;
+        }
+    }
+
+    /**
+     * Replace (or with $remove = true, delete) the ticket attachment.
+     */
+    public function updateAttachment(Ticket $ticket, User $actor, ?UploadedFile $file, bool $remove = false): Ticket
+    {
+        if (! $file && ! ($remove && $ticket->hasAttachment())) {
+            return $ticket;
+        }
+
+        $old = $ticket->attachment;
+        $oldName = $ticket->attachment_name;
+        $stored = $file ? $this->storeFile($file) : null;
+
+        try {
+            DB::transaction(function () use ($ticket, $actor, $file, $stored, $oldName) {
+                $ticket->forceFill([
+                    'attachment' => $stored,
+                    'attachment_name' => $file ? $this->cleanName($file) : null,
+                ])->save();
+
+                $this->log($ticket, $actor, TicketActivity::ATTACHMENT, $oldName, $ticket->attachment_name,
+                    $file ? ($oldName ? 'Attachment replaced' : 'Attachment uploaded') : 'Attachment removed');
+            });
+        } catch (Throwable $e) {
+            $this->deleteFile($stored);
+            throw $e;
+        }
+
+        $this->deleteFile($old);
+
+        return $ticket;
+    }
+
+    public function delete(Ticket $ticket): void
+    {
+        $path = $ticket->attachment;
+        DB::transaction(fn () => $ticket->delete());
+        $this->deleteFile($path);
+    }
+
+    private function storeFile(UploadedFile $file): string
+    {
+        // Random file name + extension derived from the real content, never the client name.
+        $path = $file->store('attachments/'.now()->format('Y/m'), self::ATTACHMENT_DISK);
+
+        if ($path === false) {
+            throw new \RuntimeException('Gagal menyimpan lampiran.');
+        }
+
+        return $path;
+    }
+
+    private function deleteFile(?string $path): void
+    {
+        if ($path) {
+            Storage::disk(self::ATTACHMENT_DISK)->delete($path);
+        }
+    }
+
+    private function cleanName(UploadedFile $file): string
+    {
+        $name = preg_replace('/[^\pL\pN._ -]+/u', '_', $file->getClientOriginalName()) ?: 'lampiran';
+
+        return Str::limit($name, 200, '');
+    }
+
+    private function createRecord(User $reporter, array $data): Ticket
     {
         return DB::transaction(function () use ($reporter, $data) {
             $ticket = Ticket::create([

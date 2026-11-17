@@ -3,9 +3,21 @@
 Aplikasi web untuk melaporkan, mendistribusikan, dan menyelesaikan kendala teknis di lingkungan kampus melalui sistem tiket terpusat.
 Dibangun dengan **Laravel 12 · MySQL · Blade · Tailwind CSS** (auth: Laravel Breeze).
 
-> Status: **Tahap 1 (MVP)** selesai. Lihat [Roadmap](#roadmap) untuk tahap berikutnya.
+> Status: **Tahap 1 (MVP)** dan **Tahap 2 (Enhancement)** selesai. Lihat [Roadmap](#roadmap) untuk tahap berikutnya.
 
-## Fitur (Tahap 1 – MVP)
+## Fitur Tahap 2 – Enhancement
+
+| Area | Isi |
+|---|---|
+| Search & filter | Pencarian kata kunci (subject, nomor tiket, deskripsi) serta filter status, kategori, prioritas, rentang tanggal dibuat, dan teknisi (khusus admin, termasuk "Belum ditugaskan"). Filter tersimpan di URL, jadi bisa dibagikan atau di-bookmark. Hasil pencarian tetap dibatasi sesuai hak akses masing-masing role. |
+| Lampiran | Satu lampiran per tiket (gambar atau dokumen: JPG, PNG, GIF, WEBP, PDF, DOC/DOCX, XLS/XLSX, TXT; maks. 5 MB). Validasi mencakup **ekstensi + MIME dari isi file + ukuran**, sehingga file `.php` yang diganti namanya menjadi `.jpg` akan ditolak. File disimpan **privat** (`storage/app/private`) dengan nama acak dan hanya disajikan lewat route yang dicek `TicketPolicy`. Gambar tampil sebagai pratinjau; dokumen selalu diunduh. Requester bisa mengganti atau menghapus lampiran selama tiket masih Open. |
+| Reports (admin) | Halaman **Reports** dengan filter tanggal dan preset (7/30/90 hari, tahun ini). Isinya: ringkasan (tiket masuk, tingkat penyelesaian, rata-rata waktu penyelesaian, belum ditugaskan), grafik per periode (harian, atau bulanan bila rentang > 62 hari), per status, per prioritas, per kategori, dan tabel kinerja teknisi. Grafik memakai **Chart.js**, yang hanya dimuat di halaman bergrafik. |
+| Export CSV | Unduh semua tiket dalam rentang tanggal laporan (UTF-8 dengan BOM agar rapi di Excel). Data di-*stream* per 500 baris, dan sel yang diawali `= + - @` dinetralkan untuk mencegah *CSV/formula injection*. |
+| Dashboard admin | Grafik donat status dan grafik batang kategori. |
+| Ticket History | Menu khusus teknisi berisi tiket yang sudah Resolved/Closed. |
+| Profil | Ubah nama/email/password dan hapus akun (dari Breeze). |
+
+## Fitur Tahap 1 – MVP
 
 | Area | Isi |
 |---|---|
@@ -32,7 +44,8 @@ Requester hanya bisa mengedit subject/deskripsi/kategori selama tiket masih **Op
 
 ## Prasyarat
 
-- PHP **8.2+** dengan ekstensi `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`
+- PHP **8.2+** dengan ekstensi `pdo_mysql`, `mbstring`, `openssl`, `fileinfo` (wajib untuk deteksi MIME lampiran)
+- `php.ini`: `upload_max_filesize` dan `post_max_size` minimal **6M** agar lampiran 5 MB bisa diunggah (default XAMPP hanya 2M; Laragon sudah cukup)
 - Composer 2
 - Node.js 18+ dan npm
 - MySQL 8 (atau MariaDB 10.6+)
@@ -108,8 +121,10 @@ Semua password: **`password`**
 | Requester | `student1@helpdesk.test` (Andi Mahasiswa) |
 | Requester | `student2@helpdesk.test` (Rina Mahasiswa) |
 
-Seeder juga membuat 6 kategori awal (Hardware, Software, Network, Account & Access, Laboratory Equipment, Other) dan 12 tiket contoh dalam berbagai status, lengkap dengan komentar dan riwayat aktivitas.
+Seeder juga membuat 6 kategori awal (Hardware, Software, Network, Account & Access, Laboratory Equipment, Other) dan 20 tiket contoh dalam berbagai status. Tiket-tiket ini tersebar di 2 bulan terakhir (relatif terhadap tanggal saat seeder dijalankan) dan lengkap dengan komentar serta riwayat aktivitas, sehingga grafik Reports langsung terisi.
 Untuk mengembalikan data ke kondisi awal: `php artisan migrate:fresh --seed`.
+
+> Catatan: `database/sql/helpdesk.sql` berisi tanggal tetap (September–November 2026). Bila diimpor jauh setelahnya, pilih rentang tanggal tersebut di halaman Reports, atau jalankan `php artisan migrate:fresh --seed` untuk data dengan tanggal terbaru. Data demo tidak menyertakan file lampiran.
 
 ## Menjalankan test
 
@@ -120,30 +135,36 @@ mysql -u root -e "CREATE DATABASE helpdesk_test CHARACTER SET utf8mb4 COLLATE ut
 php artisan test
 ```
 
-Feature test mencakup: akses per role, scoping daftar tiket, 403 untuk tiket milik orang lain, alur status lengkap, larangan melompati alur, penugasan khusus admin, validasi, komentar, manajemen kategori/user, dan perlindungan role saat register/profil.
+Feature test (84 test) mencakup:
+- **Tahap 1:** akses per role, scoping daftar tiket, 403 untuk tiket milik orang lain, alur status lengkap, larangan melompati alur, penugasan khusus admin, validasi, komentar, manajemen kategori/user, dan perlindungan role saat register/profil.
+- **Tahap 2:** pencarian dan filter (termasuk tidak bocor ke tiket orang lain), Ticket History, upload/penolakan lampiran (ekstensi, MIME palsu, ukuran), hak akses unduh lampiran, file tidak bisa diakses publik, ganti/hapus lampiran, agregasi Reports, rentang tanggal, isi export CSV dan pencegahan formula injection.
+- **Smoke test:** setiap halaman untuk tiap role dirender tanpa error.
 
 ## Struktur proyek (bagian penting)
 
 ```
 app/
   Enums/                Role, TicketStatus, TicketPriority (label + warna badge)
-  Http/Controllers/     DashboardController, TicketController, TicketActionController,
-                        Admin/CategoryController, Admin/UserController
+  Http/Controllers/     DashboardController, TicketController (+history, attachment), TicketActionController,
+                        Admin/CategoryController, Admin/UserController, Admin/ReportController (+export CSV)
   Http/Middleware/      EnsureUserHasRole (alias: role)
-  Http/Requests/        Validasi form (tiket, status, assign, komentar, kategori, user)
-  Models/               User, Category, Ticket, Comment, TicketActivity
+  Http/Requests/        Validasi form (tiket, lampiran, status, assign, komentar, kategori, user)
+  Models/               User, Category, Ticket (scope visibleTo + filter), Comment, TicketActivity
   Policies/             TicketPolicy (view/update/assign/changeStatus/comment + aturan alur)
-  Services/             TicketService (logika bisnis + DB transaction + log aktivitas)
+  Services/             TicketService (logika bisnis, lampiran, DB transaction, log aktivitas)
+                        ReportService (agregasi statistik dengan Query Builder)
+  Support/              AttachmentPolicy (format & ukuran lampiran yang diizinkan)
 database/
   migrations/           users(+role), categories, tickets, comments, ticket_activities
   seeders/              UserSeeder, CategorySeeder, TicketSeeder
   sql/helpdesk.sql      skrip SQL lengkap
 resources/views/
   layouts/              app (sidebar), sidebar, guest
-  components/           status-badge, priority-badge, stat-card, card, ticket-table, ...
+  components/           status-badge, priority-badge, stat-card, card, ticket-table, chart, ...
   dashboard/            admin, technician, requester
-  tickets/              index, create, edit, show + partials
-  admin/                categories, users
+  tickets/              index (+history), create, edit, show + partials
+  admin/                categories, users, reports
+resources/js/charts.js  inisialisasi Chart.js (dimuat dinamis)
 tests/Feature/          TicketAccessTest, TicketWorkflowTest, CommentTest, AdminTest
 ```
 
@@ -153,12 +174,12 @@ tests/Feature/          TicketAccessTest, TicketWorkflowTest, CommentTest, Admin
 |---|---|
 | `users` | id, name, email (unique), password (hash), **role** enum(admin, technician, requester) |
 | `categories` | id, name (unique), description, is_active |
-| `tickets` | id, ticket_number (unique), user_id → users, technician_id → users (nullable), category_id → categories, subject, description, priority enum(low, medium, high, critical), status enum(open, in_progress, resolved, closed), attachment, resolved_at, closed_at |
+| `tickets` | id, ticket_number (unique), user_id → users, technician_id → users (nullable), category_id → categories, subject, description, priority enum(low, medium, high, critical), status enum(open, in_progress, resolved, closed), attachment (path privat), attachment_name (nama asli), resolved_at, closed_at |
 | `comments` | id, ticket_id → tickets, user_id → users, message |
 | `ticket_activities` | id, ticket_id → tickets, user_id → users (nullable), action, old_value, new_value, description, created_at |
 
 ## Roadmap
 
-**Tahap 2 – Enhancement:** pencarian dan filter lanjutan (kategori/prioritas), upload lampiran (validasi MIME/ukuran, penyimpanan privat), halaman Reports dengan Chart.js (status/kategori/prioritas/periode/teknisi + filter tanggal), export CSV, halaman *Ticket History* teknisi.
+**Tahap 1 – MVP:** ✅ selesai. **Tahap 2 – Enhancement:** ✅ selesai.
 
 **Tahap 3 – Advanced:** notifikasi email dan perubahan status, SLA management, rating kepuasan, knowledge base/FAQ, advanced reporting.
