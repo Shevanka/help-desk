@@ -24,7 +24,12 @@
                         <a href="{{ route('tickets.show', $ticket) }}" class="block font-medium text-slate-900 hover:text-indigo-600">
                             <span class="block truncate">{{ $ticket->subject }}</span>
                         </a>
-                        <span class="font-mono text-xs text-slate-400">{{ $ticket->ticket_number }}</span>
+                        <span class="flex items-center gap-1.5 font-mono text-xs text-slate-400">
+                            {{ $ticket->ticket_number }}
+                            @if ($ticket->hasAttachment())
+                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-label="Ada lampiran"><path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
+                            @endif
+                        </span>
                     </td>
                     <td class="hidden px-4 py-3 text-slate-600 md:table-cell">{{ $ticket->category->name }}</td>
                     <td class="px-4 py-3"><x-priority-badge :priority="$ticket->priority" /></td>

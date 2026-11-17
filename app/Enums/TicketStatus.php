@@ -19,6 +19,17 @@ enum TicketStatus: string
         };
     }
 
+    /** Hex colour for Chart.js, matching the badge hue. */
+    public function chartColor(): string
+    {
+        return match ($this) {
+            self::Open => '#0ea5e9',
+            self::InProgress => '#f59e0b',
+            self::Resolved => '#10b981',
+            self::Closed => '#94a3b8',
+        };
+    }
+
     /** Tailwind classes for the status badge. */
     public function badgeClasses(): string
     {

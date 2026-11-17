@@ -13,8 +13,10 @@ use App\Services\TicketService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TicketController extends Controller
 {
@@ -24,29 +26,62 @@ class TicketController extends Controller
 
     public function index(Request $request): View
     {
+        return $this->listing($request, history: false);
+    }
+
+    /** Technician "Ticket History": tickets they already resolved / closed. */
+    public function history(Request $request): View
+    {
+        return $this->listing($request, history: true);
+    }
+
+    private function listing(Request $request, bool $history): View
+    {
         $user = $request->user();
+        $filters = $this->validatedFilters($request);
 
-        $filters = $request->validate([
-            'status' => ['nullable', Rule::enum(TicketStatus::class)],
-            'technician' => ['nullable', 'string'], // user id, or "none" for unassigned (admin only)
-        ]);
-
-        $query = Ticket::query()
-            ->visibleTo($user)
-            ->with(['category', 'requester', 'technician'])
-            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status));
-
-        if ($user->isAdmin() && ! empty($filters['technician'])) {
-            $filters['technician'] === 'none'
-                ? $query->whereNull('technician_id')
-                : $query->where('technician_id', (int) $filters['technician']);
+        if ($history) {
+            $filters['status'] = in_array($filters['status'] ?? null, [TicketStatus::Resolved->value, TicketStatus::Closed->value], true)
+                ? $filters['status']
+                : [TicketStatus::Resolved->value, TicketStatus::Closed->value];
         }
 
+        if (! $user->isAdmin()) {
+            unset($filters['technician']); // only admins may filter by technician
+        }
+
+        $tickets = Ticket::query()
+            ->visibleTo($user)
+            ->filter($filters)
+            ->with(['category', 'requester', 'technician'])
+            ->when($history, fn ($q) => $q->orderByDesc('resolved_at'), fn ($q) => $q->latest())
+            ->paginate(10)
+            ->withQueryString();
+
         return view('tickets.index', [
-            'tickets' => $query->latest()->paginate(10)->withQueryString(),
+            'tickets' => $tickets,
             'filters' => $filters,
+            'history' => $history,
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'priorities' => TicketPriority::cases(),
             'technicians' => $user->isAdmin() ? User::technicians()->orderBy('name')->get(['id', 'name']) : collect(),
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function validatedFilters(Request $request): array
+    {
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', Rule::enum(TicketStatus::class)],
+            'category' => ['nullable', 'integer', 'exists:categories,id'],
+            'priority' => ['nullable', Rule::enum(TicketPriority::class)],
+            'technician' => ['nullable', 'string', 'max:20'], // user id or "none"
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+
+        return array_filter($filters, fn ($v) => $v !== null && $v !== '');
     }
 
     public function create(): View
@@ -61,7 +96,11 @@ class TicketController extends Controller
 
     public function store(StoreTicketRequest $request): RedirectResponse
     {
-        $ticket = $this->tickets->create($request->user(), $request->validated());
+        $ticket = $this->tickets->create(
+            $request->user(),
+            $request->safe()->except('attachment'),
+            $request->file('attachment'),
+        );
 
         return redirect()
             ->route('tickets.show', $ticket)
@@ -100,7 +139,8 @@ class TicketController extends Controller
 
     public function update(UpdateTicketRequest $request, Ticket $ticket): RedirectResponse
     {
-        $this->tickets->update($ticket, $request->user(), $request->validated());
+        $this->tickets->update($ticket, $request->user(), $request->safe()->only(['subject', 'description', 'category_id']));
+        $this->tickets->updateAttachment($ticket, $request->user(), $request->file('attachment'), $request->boolean('remove_attachment'));
 
         return redirect()->route('tickets.show', $ticket)->with('status', 'Tiket berhasil diperbarui.');
     }
@@ -110,8 +150,29 @@ class TicketController extends Controller
         Gate::authorize('delete', $ticket);
 
         $number = $ticket->ticket_number;
-        $ticket->delete();
+        $this->tickets->delete($ticket);
 
         return redirect()->route('tickets.index')->with('status', "Tiket {$number} telah dihapus.");
+    }
+
+    /**
+     * Serve the private attachment to authorised users only.
+     * Images are shown inline; everything else is forced to download.
+     */
+    public function attachment(Request $request, Ticket $ticket): StreamedResponse
+    {
+        Gate::authorize('view', $ticket);
+
+        $disk = Storage::disk(TicketService::ATTACHMENT_DISK);
+        abort_unless($ticket->hasAttachment() && $disk->exists($ticket->attachment), 404, 'Lampiran tidak ditemukan.');
+
+        $name = $ticket->attachment_name ?: basename($ticket->attachment);
+        $headers = ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, max-age=0'];
+
+        if ($ticket->attachmentIsImage() && ! $request->boolean('download')) {
+            return $disk->response($ticket->attachment, $name, $headers, 'inline');
+        }
+
+        return $disk->download($ticket->attachment, $name, $headers);
     }
 }

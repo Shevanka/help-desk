@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesAttachment;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateTicketRequest extends FormRequest
 {
+    use ValidatesAttachment;
+
     public function authorize(): bool
     {
         return $this->user()->can('update', $this->route('ticket'));
@@ -23,7 +26,14 @@ class UpdateTicketRequest extends FormRequest
             'category_id' => ['required', 'integer', Rule::exists('categories', 'id')->where(
                 fn ($q) => $q->where('is_active', true)->orWhere('id', $ticket->category_id)
             )],
+            'attachment' => $this->attachmentRules(),
+            'remove_attachment' => ['nullable', 'boolean'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return $this->attachmentMessages();
     }
 
     public function attributes(): array
@@ -31,6 +41,7 @@ class UpdateTicketRequest extends FormRequest
         return [
             'description' => 'deskripsi',
             'category_id' => 'kategori',
+            'attachment' => 'lampiran',
         ];
     }
 }
