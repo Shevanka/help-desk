@@ -5,6 +5,16 @@ Dibangun dengan **Laravel 12 · MySQL · Blade · Tailwind CSS** (auth: Laravel 
 
 > Status: **Tahap 1 (MVP)** dan **Tahap 2 (Enhancement)** selesai, **Tahap 3 (Advanced)** sedang berjalan (notifikasi email sudah selesai). Lihat [Roadmap](#roadmap).
 
+## Screenshots
+
+| Dashboard admin | Detail tiket |
+| :---: | :---: |
+| ![Dashboard admin](docs/screenshots/admin-dashboard.png) | ![Detail tiket](docs/screenshots/ticket-detail.png) |
+
+| Laporan & statistik | Daftar tiket |
+| :---: | :---: |
+| ![Reports](docs/screenshots/reports.png) | ![Daftar tiket](docs/screenshots/ticket-list.png) |
+
 ## Fitur Tahap 3 – Advanced (berjalan)
 
 | Area | Isi |
@@ -28,6 +38,10 @@ MAIL_FROM_NAME="${APP_NAME}"
 ```
 
 Lalu buka inbox Mailpit di http://127.0.0.1:8025.
+
+Contoh email perubahan status:
+
+<img src="docs/screenshots/email-status-changed.png" alt="Contoh email perubahan status" width="520">
 
 ## Fitur Tahap 2 – Enhancement
 
