@@ -3,7 +3,45 @@
 Aplikasi web untuk melaporkan, mendistribusikan, dan menyelesaikan kendala teknis di lingkungan kampus melalui sistem tiket terpusat.
 Dibangun dengan **Laravel 12 · MySQL · Blade · Tailwind CSS** (auth: Laravel Breeze).
 
-> Status: **Tahap 1 (MVP)** dan **Tahap 2 (Enhancement)** selesai. Lihat [Roadmap](#roadmap) untuk tahap berikutnya.
+> Status: **Tahap 1 (MVP)** dan **Tahap 2 (Enhancement)** selesai, **Tahap 3 (Advanced)** sedang berjalan (notifikasi email sudah selesai). Lihat [Roadmap](#roadmap).
+
+## Screenshots
+
+| Dashboard admin | Detail tiket |
+| :---: | :---: |
+| ![Dashboard admin](docs/screenshots/admin-dashboard.png) | ![Detail tiket](docs/screenshots/ticket-detail.png) |
+
+| Laporan & statistik | Daftar tiket |
+| :---: | :---: |
+| ![Reports](docs/screenshots/reports.png) | ![Daftar tiket](docs/screenshots/ticket-list.png) |
+
+## Fitur Tahap 3 – Advanced (berjalan)
+
+| Area | Isi |
+|---|---|
+| Notifikasi email | Email otomatis saat **status tiket berubah** (ke pelapor), saat **tiket ditugaskan** (ke teknisi), dan saat ada **komentar baru** (ke pelapor/teknisi lain di tiket). Orang yang melakukan aksi tidak menerima email atas aksinya sendiri. Email dikirim setelah transaksi database berhasil; jika pengiriman gagal, error dicatat ke log tanpa membatalkan aksi tiket. |
+
+### Konfigurasi email
+
+Secara default `MAIL_MAILER=log`, jadi email **tidak benar-benar dikirim**, melainkan ditulis ke `storage/logs/laravel.log`. Ini cocok untuk pengembangan.
+
+Untuk melihat email dalam bentuk tampilan asli, gunakan SMTP testing seperti [Mailpit](https://mailpit.axllent.org/) atau Mailtrap:
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_HOST=127.0.0.1
+MAIL_PORT=1025
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_FROM_ADDRESS="helpdesk@kampus.local"
+MAIL_FROM_NAME="${APP_NAME}"
+```
+
+Lalu buka inbox Mailpit di http://127.0.0.1:8025.
+
+Contoh email perubahan status:
+
+<img src="docs/screenshots/email-status-changed.png" alt="Contoh email perubahan status" width="520">
 
 ## Fitur Tahap 2 – Enhancement
 
@@ -135,9 +173,10 @@ mysql -u root -e "CREATE DATABASE helpdesk_test CHARACTER SET utf8mb4 COLLATE ut
 php artisan test
 ```
 
-Feature test (84 test) mencakup:
+Feature test (92 test) mencakup:
 - **Tahap 1:** akses per role, scoping daftar tiket, 403 untuk tiket milik orang lain, alur status lengkap, larangan melompati alur, penugasan khusus admin, validasi, komentar, manajemen kategori/user, dan perlindungan role saat register/profil.
 - **Tahap 2:** pencarian dan filter (termasuk tidak bocor ke tiket orang lain), Ticket History, upload/penolakan lampiran (ekstensi, MIME palsu, ukuran), hak akses unduh lampiran, file tidak bisa diakses publik, ganti/hapus lampiran, agregasi Reports, rentang tanggal, isi export CSV dan pencegahan formula injection.
+- **Tahap 3:** penerima notifikasi email per aksi (status, penugasan, komentar), aktor tidak menerima email atas aksinya sendiri, isi email, dan email gagal tidak menggagalkan aksi tiket.
 - **Smoke test:** setiap halaman untuk tiap role dirender tanpa error.
 
 ## Struktur proyek (bagian penting)
@@ -150,8 +189,9 @@ app/
   Http/Middleware/      EnsureUserHasRole (alias: role)
   Http/Requests/        Validasi form (tiket, lampiran, status, assign, komentar, kategori, user)
   Models/               User, Category, Ticket (scope visibleTo + filter), Comment, TicketActivity
+  Notifications/        TicketStatusChanged, TicketAssigned, TicketCommented (email)
   Policies/             TicketPolicy (view/update/assign/changeStatus/comment + aturan alur)
-  Services/             TicketService (logika bisnis, lampiran, DB transaction, log aktivitas)
+  Services/             TicketService (logika bisnis, lampiran, DB transaction, log aktivitas, notifikasi)
                         ReportService (agregasi statistik dengan Query Builder)
   Support/              AttachmentPolicy (format & ukuran lampiran yang diizinkan)
 database/
@@ -165,7 +205,7 @@ resources/views/
   tickets/              index (+history), create, edit, show + partials
   admin/                categories, users, reports
 resources/js/charts.js  inisialisasi Chart.js (dimuat dinamis)
-tests/Feature/          TicketAccessTest, TicketWorkflowTest, CommentTest, AdminTest
+tests/Feature/          TicketAccessTest, TicketWorkflowTest, CommentTest, AdminTest, NotificationTest, ...
 ```
 
 ## Skema database
@@ -182,4 +222,10 @@ tests/Feature/          TicketAccessTest, TicketWorkflowTest, CommentTest, Admin
 
 **Tahap 1 – MVP:** ✅ selesai. **Tahap 2 – Enhancement:** ✅ selesai.
 
-**Tahap 3 – Advanced:** notifikasi email dan perubahan status, SLA management, rating kepuasan, knowledge base/FAQ, advanced reporting.
+**Tahap 3 – Advanced:**
+
+- [x] Notifikasi email untuk perubahan status, penugasan, dan komentar
+- [ ] SLA management (target waktu respons/penyelesaian per prioritas)
+- [ ] Rating kepuasan setelah tiket ditutup
+- [ ] Knowledge base / FAQ
+- [ ] Advanced reporting
