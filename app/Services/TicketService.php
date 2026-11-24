@@ -8,8 +8,14 @@ use App\Models\Comment;
 use App\Models\Ticket;
 use App\Models\TicketActivity;
 use App\Models\User;
+use App\Notifications\TicketAssigned;
+use App\Notifications\TicketCommented;
+use App\Notifications\TicketStatusChanged;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\Notification as BaseNotification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
@@ -17,6 +23,7 @@ use Throwable;
 /**
  * Business logic for tickets. Every mutation runs inside a DB transaction
  * together with its activity-log entry so the history never drifts.
+ * E-mail notifications are sent only after the transaction commits.
  */
 class TicketService
 {
@@ -172,6 +179,10 @@ class TicketService
 
             $this->log($ticket, $actor, TicketActivity::ASSIGNED, $old?->name, $technician?->name, $description);
 
+            if ($technician) {
+                $this->notifyAfterCommit(collect([$technician]), $actor, new TicketAssigned($ticket, $actor));
+            }
+
             return $ticket;
         });
     }
@@ -210,6 +221,9 @@ class TicketService
             $this->log($ticket, $actor, TicketActivity::STATUS_CHANGED, $old->label(), $status->label(),
                 $note ? "{$description}. Catatan: {$note}" : $description);
 
+            $this->notifyAfterCommit(collect([$ticket->requester]), $actor,
+                new TicketStatusChanged($ticket, $old, $status, $actor, $note));
+
             return $ticket;
         });
     }
@@ -245,7 +259,39 @@ class TicketService
 
             $this->log($ticket, $author, TicketActivity::COMMENTED, null, null, 'Comment added');
 
+            $comment->setRelation('user', $author);
+            $this->notifyAfterCommit(collect([$ticket->requester, $ticket->technician]), $author,
+                new TicketCommented($ticket, $comment));
+
             return $comment;
+        });
+    }
+
+    /**
+     * Send a notification to every recipient except the user who triggered it,
+     * once the surrounding transaction has committed. A mail failure is logged
+     * and never breaks the ticket workflow.
+     *
+     * @param  Collection<int, User|null>  $recipients
+     */
+    private function notifyAfterCommit(Collection $recipients, User $actor, BaseNotification $notification): void
+    {
+        $recipients = $recipients
+            ->filter()
+            ->reject(fn (User $user) => $user->is($actor))
+            ->unique('id')
+            ->values();
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        DB::afterCommit(function () use ($recipients, $notification) {
+            try {
+                Notification::send($recipients, $notification);
+            } catch (Throwable $e) {
+                report($e);
+            }
         });
     }
 
